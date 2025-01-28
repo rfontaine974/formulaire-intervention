@@ -70,13 +70,13 @@ form_template = """
         </select><br><br>
 
         <label for="date">Date (DD/MM/YYYY) :</label>
-        <input type="text" name="date" placeholder="28/01/2025" required><br><br>
+        <input type="text" name="date" placeholder="Indiquer une date" required><br><br>
 
         <label for="details">Détail :</label>
         <textarea name="details" placeholder="Description de l'intervention" required></textarea><br><br>
 
         <label for="sites">Site(s) concerné(s) :</label>
-        <input type="text" name="sites" placeholder="LJU91" required><br><br>
+        <input type="text" name="sites" placeholder="Indiquer un code site" required><br><br>
 
         <label for="impact">Impact :</label>
         <input type="text" name="impact" placeholder="Aucun impact"><br><br>
