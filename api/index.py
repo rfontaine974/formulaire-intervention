@@ -28,59 +28,40 @@ valid_intervenants = [
     "KHERBOUCHE Zoubir (CDEM)"
 ]
 
-@app.route('/', methods=['GET', 'POST'])
-def form():
-    form_data = None
-    if request.method == 'POST':
-        type_operation = request.form.get('type_operation')
-        date_input = request.form.get('date')
-        try:
-            date_obj = datetime.strptime(date_input, "%d/%m/%Y")
-            date_str = f"Dans la nuit du {date_obj.strftime('%d/%m/%Y')} au {(date_obj + timedelta(days=1)).strftime('%d/%m/%Y')}"
-        except ValueError:
-            date_str = "Date invalide"
-
-        details = request.form.get('details')
-        sites = request.form.get('sites').upper()
-        impact = request.form.get('impact') or "Aucun impact"
-        intervenants = request.form.get('intervenants')
-        deuxieme_intervenant = request.form.get('deuxieme_intervenant') or "-"
-
-        form_data = f"""Type d'opération : {type_operation}
-Date : {date_str}
-Détail : {details}
-Site(s) concerné(s) : {sites}
-Impact : {impact}
-Intervenants : {intervenants}
-Deuxième intervenant : {deuxieme_intervenant}"""
-
-    ops_html = "".join([f'<option value="{op}">{op}</option>' for op in valid_operations])
-    intervenants_html = "".join([f'<option value="{i}">{i}</option>' for i in valid_intervenants])
-
-    form_template = f"""<!DOCTYPE html>
+HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Formulaire d'Intervention Technique</title>
-    <script src="https://cdn.tailwindcss.com"><\/script>
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
-        body {{ font-family: 'Inter', sans-serif; background-color: #f7f9fb; }}
-        select:focus, input:focus, textarea:focus {{
+        body { font-family: 'Inter', sans-serif; background-color: #f7f9fb; }
+        select:focus, input:focus, textarea:focus {
             border-color: #E80029 !important;
             box-shadow: 0 0 0 3px rgba(232, 0, 41, 0.1) !important;
-        }}
+        }
     </style>
     <script>
-        function copyToClipboard() {{
-            const content = document.getElementById("generatedForm").textContent;
-            navigator.clipboard.writeText(content).then(() => {{
+        function copyToClipboard() {
+            const elem = document.getElementById("generatedForm");
+            if (!elem) {
+                alert("Erreur: aucun contenu a copier");
+                return;
+            }
+            const text = elem.textContent;
+            navigator.clipboard.writeText(text).then(function() {
                 const msg = document.getElementById("copyMessage");
-                msg.style.opacity = '1';
-                setTimeout(() => {{ msg.style.opacity = '0'; }}, 2000);
-            }}).catch(() => alert("Erreur lors de la copie"));
-        }}
+                if (msg) {
+                    msg.style.opacity = '1';
+                    setTimeout(() => { msg.style.opacity = '0'; }, 2000);
+                }
+            }).catch(function(err) {
+                console.error("Erreur clipboard:", err);
+                alert("Erreur lors de la copie: " + err);
+            });
+        }
     </script>
 </head>
 <body class="p-4 sm:p-8">
@@ -95,7 +76,9 @@ Deuxième intervenant : {deuxieme_intervenant}"""
                 <label class="block text-sm font-medium text-gray-700 mb-1">Type d'opération <span class="text-red-500">*</span></label>
                 <select name="type_operation" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm">
                     <option value="">-- Sélectionner une opération --</option>
-                    {ops_html}
+                    {% for op in operations %}
+                    <option value="{{ op }}">{{ op }}</option>
+                    {% endfor %}
                 </select>
             </div>
 
@@ -113,7 +96,9 @@ Deuxième intervenant : {deuxieme_intervenant}"""
                 <label class="block text-sm font-medium text-gray-700 mb-1">Intervenant Principal <span class="text-red-500">*</span></label>
                 <select name="intervenants" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm">
                     <option value="">-- Sélectionner un intervenant --</option>
-                    {intervenants_html}
+                    {% for i in intervenants %}
+                    <option value="{{ i }}">{{ i }}</option>
+                    {% endfor %}
                 </select>
             </div>
 
@@ -121,7 +106,9 @@ Deuxième intervenant : {deuxieme_intervenant}"""
                 <label class="block text-sm font-medium text-gray-700 mb-1">Deuxième intervenant</label>
                 <select name="deuxieme_intervenant" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm">
                     <option value="">-- Optionnel --</option>
-                    {intervenants_html}
+                    {% for i in intervenants %}
+                    <option value="{{ i }}">{{ i }}</option>
+                    {% endfor %}
                 </select>
             </div>
 
@@ -142,12 +129,59 @@ Deuxième intervenant : {deuxieme_intervenant}"""
             </div>
         </form>
 
-        {'<div class="mt-12 pt-6 border-t border-gray-200"><h2 class="text-2xl font-bold text-gray-800 mb-4">📝 Résultat du Formulaire</h2><pre id="generatedForm" class="whitespace-pre-wrap p-4 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700 leading-relaxed">' + form_data + '</pre><button onclick="copyToClipboard()" class="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-green-600 hover:bg-green-700"><span>📋 Copier le formulaire</span></button><span id="copyMessage" class="ml-4 text-sm text-green-600" style="opacity: 0; transition: opacity 0.3s;">Copié !</span></div>' if form_data else ''}
+        {% if form_data %}
+        <div class="mt-12 pt-6 border-t border-gray-200">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4">📝 Résultat du Formulaire</h2>
+            <pre id="generatedForm" class="whitespace-pre-wrap p-4 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700 leading-relaxed">{{ form_data }}</pre>
+            <button type="button" onclick="copyToClipboard()" class="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-green-600 hover:bg-green-700">
+                📋 Copier le formulaire
+            </button>
+            <span id="copyMessage" class="ml-4 text-sm text-green-600" style="opacity: 0; transition: opacity 0.3s;">Copié !</span>
+        </div>
+        {% endif %}
     </div>
 </body>
-</html>"""
+</html>
+"""
 
-    return render_template_string(form_template)
+@app.route('/', methods=['GET', 'POST'])
+def form():
+    form_data = None
+    
+    if request.method == 'POST':
+        type_operation = request.form.get('type_operation')
+        date_input = request.form.get('date')
+        details = request.form.get('details')
+        sites = request.form.get('sites', '').upper()
+        impact = request.form.get('impact') or "Aucun impact"
+        intervenants = request.form.get('intervenants')
+        deuxieme_intervenant = request.form.get('deuxieme_intervenant') or "-"
+        
+        # Date processing
+        date_str = "Date non spécifiée"
+        if date_input:
+            try:
+                date_obj = datetime.strptime(date_input, "%d/%m/%Y")
+                next_day = date_obj + timedelta(days=1)
+                date_str = f"Dans la nuit du {date_obj.strftime('%d/%m/%Y')} au {next_day.strftime('%d/%m/%Y')}"
+            except ValueError:
+                date_str = "Date invalide"
+        
+        # Build output
+        form_data = f"""Type d'opération : {type_operation}
+Date : {date_str}
+Détail : {details}
+Site(s) concerné(s) : {sites}
+Impact : {impact}
+Intervenants : {intervenants}
+Deuxième intervenant : {deuxieme_intervenant}"""
+    
+    return render_template_string(
+        HTML_TEMPLATE,
+        operations=valid_operations,
+        intervenants=valid_intervenants,
+        form_data=form_data
+    )
 
 if __name__ == '__main__':
     app.run(debug=False)
