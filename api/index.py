@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from flask import Flask, request, render_template_string
 from datetime import datetime, timedelta
 
@@ -53,31 +54,33 @@ Impact : {impact}
 Intervenants : {intervenants}
 Deuxième intervenant : {deuxieme_intervenant}"""
 
-    form_template = """
-<!DOCTYPE html>
+    ops_html = "".join([f'<option value="{op}">{op}</option>' for op in valid_operations])
+    intervenants_html = "".join([f'<option value="{i}">{i}</option>' for i in valid_intervenants])
+
+    form_template = f"""<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Formulaire d'Intervention Technique</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.tailwindcss.com"><\/script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
-        body { font-family: 'Inter', sans-serif; background-color: #f7f9fb; }
-        select:focus, input:focus, textarea:focus {
+        body {{ font-family: 'Inter', sans-serif; background-color: #f7f9fb; }}
+        select:focus, input:focus, textarea:focus {{
             border-color: #E80029 !important;
             box-shadow: 0 0 0 3px rgba(232, 0, 41, 0.1) !important;
-        }
+        }}
     </style>
     <script>
-        function copyToClipboard() {
+        function copyToClipboard() {{
             const content = document.getElementById("generatedForm").textContent;
-            navigator.clipboard.writeText(content).then(() => {
+            navigator.clipboard.writeText(content).then(() => {{
                 const msg = document.getElementById("copyMessage");
                 msg.style.opacity = '1';
-                setTimeout(() => { msg.style.opacity = '0'; }, 2000);
-            }).catch(() => alert("Erreur lors de la copie"));
-        }
+                setTimeout(() => {{ msg.style.opacity = '0'; }}, 2000);
+            }}).catch(() => alert("Erreur lors de la copie"));
+        }}
     </script>
 </head>
 <body class="p-4 sm:p-8">
@@ -92,7 +95,7 @@ Deuxième intervenant : {deuxieme_intervenant}"""
                 <label class="block text-sm font-medium text-gray-700 mb-1">Type d'opération <span class="text-red-500">*</span></label>
                 <select name="type_operation" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm">
                     <option value="">-- Sélectionner une opération --</option>
-                    """ + "".join([f'<option value="{op}">{op}</option>' for op in valid_operations]) + """
+                    {ops_html}
                 </select>
             </div>
 
@@ -108,16 +111,17 @@ Deuxième intervenant : {deuxieme_intervenant}"""
 
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Intervenant Principal <span class="text-red-500">*</span></label>
-                <select name="intervenants" onchange="updateBackupOptions()" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm">
+                <select name="intervenants" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm">
                     <option value="">-- Sélectionner un intervenant --</option>
-                    """ + "".join([f'<option value="{i}">{i}</option>' for i in valid_intervenants]) + """
+                    {intervenants_html}
                 </select>
             </div>
 
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Backup (Garant) <span class="text-red-500">*</span></label>
-                <select name="backup" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm">
-                    <option value="">-- Sélectionner un backup --</option>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Deuxième intervenant</label>
+                <select name="deuxieme_intervenant" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm">
+                    <option value="">-- Optionnel --</option>
+                    {intervenants_html}
                 </select>
             </div>
 
@@ -126,31 +130,24 @@ Deuxième intervenant : {deuxieme_intervenant}"""
                 <textarea name="details" rows="4" placeholder="Description complète de l'intervention..." required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm"></textarea>
             </div>
 
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Intervenant Principal <span class="text-red-500">*</span></label>
-                <select name="intervenants" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm">
-                    <option value="">-- Sélectionner un intervenant --</option>
-                    """ + "".join([f'<option value="{i}">{i}</option>' for i in valid_intervenants]) + """
-                </select>
+            <div class="md:col-span-2">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Impact (laisser vide = "Aucun impact")</label>
+                <input type="text" name="impact" placeholder="Ex: Coupure de X minutes..." class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm">
             </div>
 
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Deuxième intervenant</label>
-                <select name="deuxieme_intervenant" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm">
-                    <option value="">-- Optionnel --</option>
-                    """ + "".join([f'<option value="{i}">{i}</option>' for i in valid_intervenants]) + """
-                </select>
-            </div>  """ + "".join([f'<option value="{i}">{i}</option>' for i in valid_intervenants]) + """
-                </select>
-            </div>d="generatedForm" class="whitespace-pre-wrap p-4 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700 leading-relaxed">""" + (form_data or "") + """</pre>
-            <button onclick="copyToClipboard()" class="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-green-600 hover:bg-green-700">
-                📋 Copier le formulaire
-            </button>
-            <span id="copyMessage" class="ml-4 text-sm text-green-600" style="opacity: 0; transition: opacity 0.3s;">Copié !</span>
-        </div>
-        """ if form_data else "") + """
+            <div class="md:col-span-2 mt-4">
+                <button type="submit" class="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-md text-lg font-medium text-white transition duration-200" style="background-color: #E80029;" onmouseover="this.style.backgroundColor='#c40022'" onmouseout="this.style.backgroundColor='#E80029'">
+                    Générer et Afficher le Formulaire
+                </button>
+            </div>
+        </form>
+
+        {'<div class="mt-12 pt-6 border-t border-gray-200"><h2 class="text-2xl font-bold text-gray-800 mb-4">📝 Résultat du Formulaire</h2><pre id="generatedForm" class="whitespace-pre-wrap p-4 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700 leading-relaxed">' + form_data + '</pre><button onclick="copyToClipboard()" class="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-green-600 hover:bg-green-700"><span>📋 Copier le formulaire</span></button><span id="copyMessage" class="ml-4 text-sm text-green-600" style="opacity: 0; transition: opacity 0.3s;">Copié !</span></div>' if form_data else ''}
     </div>
 </body>
-</html>
-"""
+</html>"""
+
     return render_template_string(form_template)
+
+if __name__ == '__main__':
+    app.run(debug=False)
