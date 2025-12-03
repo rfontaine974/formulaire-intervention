@@ -43,13 +43,15 @@ def form():
         sites = request.form.get('sites').upper()
         impact = request.form.get('impact') or "Aucun impact"
         intervenants = request.form.get('intervenants')
+        deuxieme_intervenant = request.form.get('deuxieme_intervenant') or "-"
 
         form_data = f"""Type d'opération : {type_operation}
 Date : {date_str}
 Détail : {details}
 Site(s) concerné(s) : {sites}
 Impact : {impact}
-Intervenants : {intervenants}"""
+Intervenants : {intervenants}
+Deuxième intervenant : {deuxieme_intervenant}"""
 
     form_template = """
 <!DOCTYPE html>
@@ -124,13 +126,21 @@ Intervenants : {intervenants}"""
                 <textarea name="details" rows="4" placeholder="Description complète de l'intervention..." required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm"></textarea>
             </div>
 
-            <div class="md:col-span-2">
-                <label class="block text-sm font-medium text-gray-700 mb-1">Impact (laisser vide = "Aucun impact")</label>
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Intervenant Principal <span class="text-red-500">*</span></label>
                 <select name="intervenants" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm">
                     <option value="">-- Sélectionner un intervenant --</option>
                     """ + "".join([f'<option value="{i}">{i}</option>' for i in valid_intervenants]) + """
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Deuxième intervenant</label>
+                <select name="deuxieme_intervenant" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm">
+                    <option value="">-- Optionnel --</option>
+                    """ + "".join([f'<option value="{i}">{i}</option>' for i in valid_intervenants]) + """
+                </select>
+            </div>  """ + "".join([f'<option value="{i}">{i}</option>' for i in valid_intervenants]) + """
                 </select>
             </div>d="generatedForm" class="whitespace-pre-wrap p-4 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700 leading-relaxed">""" + (form_data or "") + """</pre>
             <button onclick="copyToClipboard()" class="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-green-600 hover:bg-green-700">

@@ -13,12 +13,13 @@
   - Vanilla JavaScript handles all form logic (no framework)
 
 ### Data Model
-The form captures 6 fields:
+The form captures 7 fields:
 ```
 Type d'opération → select dropdown
 Date → HTML5 date input (converted to "nuit du D au D+1" format)
 Site(s) concerné(s) → text input (auto-uppercase)
-Intervenant Principal → select dropdown
+Intervenant Principal → select dropdown (required)
+Deuxième intervenant → select dropdown (optional, defaults to "-")
 Détail de l'opération → textarea
 Impact → optional text input (defaults to "Aucun impact")
 ```
@@ -33,7 +34,7 @@ Impact → optional text input (defaults to "Aucun impact")
 **Technician List** (valid_intervenants):
 - Hard-coded list at line ~12: includes roles (PQIS, CQIS, PDEM, CDEM)
 - Update this list when adding new technicians
-- No pairing logic anymore (Backup field removed)
+- Used for both "Intervenant Principal" and "Deuxième intervenant"
 **Date Format**:
 - Input: HTML5 `YYYY-MM-DD`
 - Output: `Dans la nuit du DD/MM/YYYY au DD/MM/YYYY` (adds 1 day for night shift convention)

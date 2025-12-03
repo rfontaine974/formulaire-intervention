@@ -62,6 +62,16 @@
                 </select>
             </div>
 
+            <div>
+                <label for="deuxieme_intervenant" class="block text-sm font-medium text-gray-700 mb-1">
+                    Deuxième intervenant
+                </label>
+                <select id="deuxieme_intervenant" name="deuxieme_intervenant"
+                        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm">
+                    <option value="">-- Optionnel --</option>
+                </select>
+            </div>
+
             <div class="md:col-span-2">
                 <label for="details" class="block text-sm font-medium text-gray-700 mb-1">
                     Détail de l'opération <span class="text-red-500">*</span>
@@ -172,6 +182,7 @@
             const sites = data.sites.toUpperCase();
             const impact = data.impact || "Aucun impact";
             const intervenants = data.intervenants;
+            const deuxieme_intervenant = data.deuxieme_intervenant || "-";
             
             let date_str = "Date non spécifiée";
             if (data.date) {
@@ -190,11 +201,12 @@
             }
 
             const generatedText = `Type d'opération : ${type_operation}
-            const generatedText = `Type d'opération : ${type_operation}
 Date : ${date_str}
 Détail : ${details}
 Site(s) concerné(s) : ${sites}
 Impact : ${impact}
+Intervenants : ${intervenants}
+Deuxième intervenant : ${deuxieme_intervenant}`;
 Intervenants : ${intervenants}`;
             generatedFormPre.textContent = generatedText;
             resultSection.style.display = 'block';
