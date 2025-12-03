@@ -57,19 +57,8 @@
                     Intervenant Principal <span class="text-red-500">*</span>
                 </label>
                 <select id="intervenants" name="intervenants" required
-                        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm"
-                        onchange="updateBackupOptions()">
-                    <option value="">-- Sélectionner un intervenant --</option>
-                </select>
-            </div>
-            
-            <div>
-                <label for="backup" class="block text-sm font-medium text-gray-700 mb-1">
-                    Backup (Garant) <span class="text-red-500">*</span>
-                </label>
-                <select id="backup" name="backup" required
                         class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm">
-                    <option value="">-- Sélectionner un backup --</option>
+                    <option value="">-- Sélectionner un intervenant --</option>
                 </select>
             </div>
 
@@ -157,31 +146,6 @@
             return `${day}/${month}/${year}`;
         }
         
-        function updateBackupOptions() {
-            const intervenant = intervenantSelect.value;
-            let validBackups = [];
-
-            if (!intervenant) {
-                backupSelect.innerHTML = '<option value="">-- Sélectionner un intervenant principal d\'abord --</option>';
-                return;
-            }
-
-            if (intervenant.includes("PQIS")) {
-                validBackups = valid_intervenants.filter(i => i.includes("CQIS"));
-            } else if (intervenant.includes("CQIS")) {
-                validBackups = valid_intervenants.filter(i => i.includes("PQIS"));
-            } else {
-                validBackups = valid_intervenants.filter(i => !i.includes("PQIS") && !i.includes("CQIS") && i !== intervenant);
-            }
-
-            if (validBackups.length === 0) {
-                backupSelect.innerHTML = '<option value="">-- Aucun backup disponible --</option>';
-            } else {
-                backupSelect.innerHTML = '<option value="">-- Sélectionner un backup --</option>' + 
-                    validBackups.map(backup => `<option value="${backup}">${backup}</option>`).join('');
-            }
-        }
-
         function populateSelects() {
             operationSelect.innerHTML = '<option value="">-- Sélectionner une opération --</option>' + 
                 valid_operations.map(op => `<option value="${op}">${op}</option>`).join('');
@@ -198,7 +162,7 @@
             const formData = new FormData(form);
             const data = Object.fromEntries(formData.entries());
             
-            if (!data.type_operation || !data.intervenants || !data.backup) {
+            if (!data.type_operation || !data.intervenants) {
                 alert('Veuillez sélectionner tous les champs obligatoires');
                 return;
             }
@@ -208,7 +172,6 @@
             const sites = data.sites.toUpperCase();
             const impact = data.impact || "Aucun impact";
             const intervenants = data.intervenants;
-            const backup = data.backup;
             
             let date_str = "Date non spécifiée";
             if (data.date) {
@@ -227,13 +190,12 @@
             }
 
             const generatedText = `Type d'opération : ${type_operation}
+            const generatedText = `Type d'opération : ${type_operation}
 Date : ${date_str}
 Détail : ${details}
 Site(s) concerné(s) : ${sites}
 Impact : ${impact}
-Intervenants : ${intervenants}
-Backup : ${backup}`;
-
+Intervenants : ${intervenants}`;
             generatedFormPre.textContent = generatedText;
             resultSection.style.display = 'block';
             setTimeout(() => resultSection.scrollIntoView({ behavior: 'smooth' }), 100);

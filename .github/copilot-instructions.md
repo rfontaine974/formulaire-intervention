@@ -13,13 +13,12 @@
   - Vanilla JavaScript handles all form logic (no framework)
 
 ### Data Model
-The form captures 7 fields:
+The form captures 6 fields:
 ```
 Type d'opération → select dropdown
 Date → HTML5 date input (converted to "nuit du D au D+1" format)
 Site(s) concerné(s) → text input (auto-uppercase)
 Intervenant Principal → select dropdown
-Backup (Garant) → select dropdown (filtered based on intervenant)
 Détail de l'opération → textarea
 Impact → optional text input (defaults to "Aucun impact")
 ```
@@ -31,11 +30,10 @@ Impact → optional text input (defaults to "Aucun impact")
 - Modify at line ~170 in `app.py`
 
 **Technician Pairing Rules** (critical for backup logic):
-- PQIS ↔ CQIS: If main intervenant is PQIS, backup must be CQIS (and vice versa)
-- Other technicians: Can backup each other except PQIS/CQIS
-- Hard-coded technician list at line ~177: includes roles (PQIS, CQIS, PDEM, CDEM)
+**Technician List** (valid_intervenants):
+- Hard-coded list at line ~12: includes roles (PQIS, CQIS, PDEM, CDEM)
 - Update this list when adding new technicians
-
+- No pairing logic anymore (Backup field removed)
 **Date Format**:
 - Input: HTML5 `YYYY-MM-DD`
 - Output: `Dans la nuit du DD/MM/YYYY au DD/MM/YYYY` (adds 1 day for night shift convention)

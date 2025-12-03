@@ -43,15 +43,13 @@ def form():
         sites = request.form.get('sites').upper()
         impact = request.form.get('impact') or "Aucun impact"
         intervenants = request.form.get('intervenants')
-        backup = request.form.get('backup')
 
         form_data = f"""Type d'opération : {type_operation}
 Date : {date_str}
 Détail : {details}
 Site(s) concerné(s) : {sites}
 Impact : {impact}
-Intervenants : {intervenants}
-Backup : {backup}"""
+Intervenants : {intervenants}"""
 
     form_template = """
 <!DOCTYPE html>
@@ -70,28 +68,6 @@ Backup : {backup}"""
         }
     </style>
     <script>
-        function updateBackupOptions() {
-            const intervenant = document.querySelector('select[name="intervenants"]').value;
-            const backupSelect = document.querySelector('select[name="backup"]');
-            const validBackups = """ + str(valid_intervenants).replace("'", '"') + """;
-            let options = [];
-
-            if (!intervenant) {
-                backupSelect.innerHTML = '<option value="">-- Sélectionner un intervenant --</option>';
-                return;
-            }
-
-            if (intervenant.includes("PQIS")) {
-                options = validBackups.filter(i => i.includes("CQIS"));
-            } else if (intervenant.includes("CQIS")) {
-                options = validBackups.filter(i => i.includes("PQIS"));
-            } else {
-                options = validBackups.filter(i => !i.includes("PQIS") && !i.includes("CQIS") && i !== intervenant);
-            }
-
-            backupSelect.innerHTML = options.map(b => `<option value="${b}">${b}</option>`).join('');
-        }
-
         function copyToClipboard() {
             const content = document.getElementById("generatedForm").textContent;
             navigator.clipboard.writeText(content).then(() => {
@@ -150,20 +126,13 @@ Backup : {backup}"""
 
             <div class="md:col-span-2">
                 <label class="block text-sm font-medium text-gray-700 mb-1">Impact (laisser vide = "Aucun impact")</label>
-                <input type="text" name="impact" placeholder="Ex: Coupure de X minutes..." class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm">
-            </div>
-
-            <div class="md:col-span-2 mt-4">
-                <button type="submit" class="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-md text-lg font-medium text-white transition duration-200" style="background-color: #E80029;" onmouseover="this.style.backgroundColor='#c40022'" onmouseout="this.style.backgroundColor='#E80029'">
-                    Générer et Afficher le Formulaire
-                </button>
-            </div>
-        </form>
-
-        """ + ("""
-        <div class="mt-12 pt-6 border-t border-gray-200">
-            <h2 class="text-2xl font-bold text-gray-800 mb-4">📝 Résultat du Formulaire</h2>
-            <pre id="generatedForm" class="whitespace-pre-wrap p-4 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700 leading-relaxed">""" + (form_data or "") + """</pre>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Intervenant Principal <span class="text-red-500">*</span></label>
+                <select name="intervenants" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm">
+                    <option value="">-- Sélectionner un intervenant --</option>
+                    """ + "".join([f'<option value="{i}">{i}</option>' for i in valid_intervenants]) + """
+                </select>
+            </div>d="generatedForm" class="whitespace-pre-wrap p-4 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700 leading-relaxed">""" + (form_data or "") + """</pre>
             <button onclick="copyToClipboard()" class="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-green-600 hover:bg-green-700">
                 📋 Copier le formulaire
             </button>
