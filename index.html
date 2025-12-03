@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Formulaire d'Intervention Technique FreeStyle</title>
+    <!-- Chargement de Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f9fb;
+        }
+        select:focus, input:focus, textarea:focus {
+            border-color: #E80029 !important;
+            box-shadow: 0 0 0 3px rgba(232, 0, 41, 0.1) !important;
+        }
+    </style>
+</head>
+<body class="p-4 sm:p-8">
+    <div class="max-w-4xl mx-auto bg-white shadow-xl rounded-xl p-6 sm:p-10">
+        <header class="mb-8 border-b pb-4 border-gray-200">
+            <h1 class="text-3xl font-extrabold" style="color: #E80029;">🔴 Formulaire d'Opération Technique</h1>
+            <p class="text-gray-500 mt-1">Saisissez les détails pour générer le rapport d'opération standardisé.</p>
+        </header>
+
+        <form id="interventionForm" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="md:col-span-2">
+                <label for="type_operation" class="block text-sm font-medium text-gray-700 mb-1">
+                    Type d'opération <span class="text-red-500">*</span>
+                </label>
+                <select id="type_operation" name="type_operation" required
+                        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm">
+                    <option value="">-- Sélectionner une opération --</option>
+                </select>
+            </div>
+
+            <div>
+                <label for="date_input" class="block text-sm font-medium text-gray-700 mb-1">
+                    Date d'Intervention <span class="text-red-500">*</span>
+                </label>
+                <input type="date" id="date_input" name="date" required
+                       class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm">
+            </div>
+
+            <div>
+                <label for="sites" class="block text-sm font-medium text-gray-700 mb-1">
+                    Site(s) concerné(s) <span class="text-red-500">*</span>
+                </label>
+                <input type="text" id="sites" name="sites" placeholder="Ex: CND75, PARD12..." required
+                       class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm">
+            </div>
+            
+            <div>
+                <label for="intervenants" class="block text-sm font-medium text-gray-700 mb-1">
+                    Intervenant Principal <span class="text-red-500">*</span>
+                </label>
+                <select id="intervenants" name="intervenants" required
+                        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm"
+                        onchange="updateBackupOptions()">
+                    <option value="">-- Sélectionner un intervenant --</option>
+                </select>
+            </div>
+            
+            <div>
+                <label for="backup" class="block text-sm font-medium text-gray-700 mb-1">
+                    Backup (Garant) <span class="text-red-500">*</span>
+                </label>
+                <select id="backup" name="backup" required
+                        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm">
+                    <option value="">-- Sélectionner un backup --</option>
+                </select>
+            </div>
+
+            <div class="md:col-span-2">
+                <label for="details" class="block text-sm font-medium text-gray-700 mb-1">
+                    Détail de l'opération <span class="text-red-500">*</span>
+                </label>
+                <textarea id="details" name="details" rows="4" 
+                          placeholder="Description complète de l'intervention, des étapes et des tests effectués." required
+                          class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm"></textarea>
+            </div>
+
+            <div class="md:col-span-2">
+                <label for="impact" class="block text-sm font-medium text-gray-700 mb-1">
+                    Impact (laisser vide si "Aucun impact")
+                </label>
+                <input type="text" id="impact" name="impact" 
+                       placeholder="Ex: Coupure de service de X minutes, uniquement sur la zone Y."
+                       class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm">
+            </div>
+
+            <div class="md:col-span-2 mt-4">
+                <button type="submit"
+                        class="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-md text-lg font-medium text-white transition duration-200"
+                        style="background-color: #E80029;"
+                        onmouseover="this.style.backgroundColor='#c40022'"
+                        onmouseout="this.style.backgroundColor='#E80029'">
+                    Générer et Afficher le Formulaire
+                </button>
+            </div>
+        </form>
+
+        <div id="resultSection" class="mt-12 pt-6 border-t border-gray-200" style="display: none;">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4">📝 Résultat du Formulaire</h2>
+            
+            <pre id="generatedForm"
+                 class="whitespace-pre-wrap p-4 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700 leading-relaxed"></pre>
+            
+            <button id="copyButton" onclick="copyToClipboard()"
+                    class="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-green-600 hover:bg-green-700">
+                📋 Copier le formulaire
+            </button>
+            
+            <span id="copyMessage" class="ml-4 text-sm text-green-600" style="opacity: 0; transition: opacity 0.3s;">Copié !</span>
+        </div>
+    </div>
+
+    <script>
+        const valid_operations = [
+            "Autre HNO",
+            "Insertion NRA",
+            "Installation d'un DSLAM mobile",
+            "Installation/migration/mise en prod d'un switch",
+            "Intervention sur alimentation d'un switch",
+            "Migration/ajout bandeau NRJ",
+            "Normalisation/vérification/maintenance sur un NRA",
+            "Shunt d'un départ NRJ",
+            "Suppression switch"
+        ];
+
+        const valid_intervenants = [
+            "FONTAINE Rodolphe (PQIS)",
+            "RIZZO Anthony (CQIS)",
+            "JULIEN Williams (PDEM)",
+            "PEREIRA David (PDEM)",
+            "GONNORD Bertrand (CDEM)",
+            "AUGE Ludovic (CDEM)",
+            "BURG Fabien (CDEM)",
+            "DEVLIN Christophe (CDEM)",
+            "KHERBOUCHE Zoubir (CDEM)"
+        ];
+
+        const form = document.getElementById('interventionForm');
+        const operationSelect = document.getElementById('type_operation');
+        const intervenantSelect = document.getElementById('intervenants');
+        const backupSelect = document.getElementById('backup');
+        const generatedFormPre = document.getElementById('generatedForm');
+        const resultSection = document.getElementById('resultSection');
+        const copyMessage = document.getElementById('copyMessage');
+        
+        function formatDate(date) {
+            const day = String(date.getDate()).padStart(2, '0');
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const year = date.getFullYear();
+            return `${day}/${month}/${year}`;
+        }
+        
+        function updateBackupOptions() {
+            const intervenant = intervenantSelect.value;
+            let validBackups = [];
+
+            if (!intervenant) {
+                backupSelect.innerHTML = '<option value="">-- Sélectionner un intervenant principal d\'abord --</option>';
+                return;
+            }
+
+            if (intervenant.includes("PQIS")) {
+                validBackups = valid_intervenants.filter(i => i.includes("CQIS"));
+            } else if (intervenant.includes("CQIS")) {
+                validBackups = valid_intervenants.filter(i => i.includes("PQIS"));
+            } else {
+                validBackups = valid_intervenants.filter(i => !i.includes("PQIS") && !i.includes("CQIS") && i !== intervenant);
+            }
+
+            if (validBackups.length === 0) {
+                backupSelect.innerHTML = '<option value="">-- Aucun backup disponible --</option>';
+            } else {
+                backupSelect.innerHTML = '<option value="">-- Sélectionner un backup --</option>' + 
+                    validBackups.map(backup => `<option value="${backup}">${backup}</option>`).join('');
+            }
+        }
+
+        function populateSelects() {
+            operationSelect.innerHTML = '<option value="">-- Sélectionner une opération --</option>' + 
+                valid_operations.map(op => `<option value="${op}">${op}</option>`).join('');
+
+            intervenantSelect.innerHTML = '<option value="">-- Sélectionner un intervenant --</option>' + 
+                valid_intervenants.map(i => `<option value="${i}">${i}</option>`).join('');
+
+            updateBackupOptions();
+        }
+
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(form);
+            const data = Object.fromEntries(formData.entries());
+            
+            if (!data.type_operation || !data.intervenants || !data.backup) {
+                alert('Veuillez sélectionner tous les champs obligatoires');
+                return;
+            }
+            
+            const type_operation = data.type_operation;
+            const details = data.details;
+            const sites = data.sites.toUpperCase();
+            const impact = data.impact || "Aucun impact";
+            const intervenants = data.intervenants;
+            const backup = data.backup;
+            
+            let date_str = "Date non spécifiée";
+            if (data.date) {
+                try {
+                    const dateObj = new Date(data.date + 'T00:00:00');
+                    if (!isNaN(dateObj.getTime())) {
+                        const nextDayObj = new Date(dateObj);
+                        nextDayObj.setDate(dateObj.getDate() + 1);
+                        const dateJ = formatDate(dateObj);
+                        const dateJPlus1 = formatDate(nextDayObj);
+                        date_str = `Dans la nuit du ${dateJ} au ${dateJPlus1}`;
+                    }
+                } catch (err) {
+                    console.error('Erreur date:', err);
+                }
+            }
+
+            const generatedText = `Type d'opération : ${type_operation}
+Date : ${date_str}
+Détail : ${details}
+Site(s) concerné(s) : ${sites}
+Impact : ${impact}
+Intervenants : ${intervenants}
+Backup : ${backup}`;
+
+            generatedFormPre.textContent = generatedText;
+            resultSection.style.display = 'block';
+            setTimeout(() => resultSection.scrollIntoView({ behavior: 'smooth' }), 100);
+        });
+
+        function copyToClipboard() {
+            const content = generatedFormPre.textContent;
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(content).then(() => {
+                    showCopyMessage("✓ Copié !", true);
+                }).catch(() => fallbackCopy(content));
+            } else {
+                fallbackCopy(content);
+            }
+        }
+
+        function fallbackCopy(text) {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.left = '-9999px';
+            document.body.appendChild(textarea);
+            textarea.select();
+            try {
+                document.execCommand('copy');
+                showCopyMessage("✓ Copié !", true);
+            } catch (err) {
+                showCopyMessage("✗ Erreur lors de la copie", false);
+            }
+            document.body.removeChild(textarea);
+        }
+
+        function showCopyMessage(message, isSuccess) {
+            copyMessage.textContent = message;
+            copyMessage.style.color = isSuccess ? '#16a34a' : '#dc2626';
+            copyMessage.style.opacity = '1';
+            setTimeout(() => { copyMessage.style.opacity = '0'; }, 2000);
+        }
+        
+        document.addEventListener('DOMContentLoaded', populateSelects);
+    </script>
+</body>
+</html>
