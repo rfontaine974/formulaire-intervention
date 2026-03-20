@@ -4,6 +4,8 @@ Gestionnaire de Templates - Application System Tray
 Usage:
   python clipboard_app.py          → Lance l'app en arrière-plan (icône tray)
   python clipboard_app.py --popup  → Affiche le popup de sélection (appelé par clic droit)
+
+Raccourci clavier global : Ctrl+Shift+Q
 """
 
 import sys
@@ -517,8 +519,15 @@ def create_tray_icon():
 def run_tray():
     """Lance l'application en mode system tray."""
     import pystray
+    import keyboard
 
     icon_image = create_tray_icon()
+
+    def hotkey_handler():
+        popup = TemplatePopup()
+        popup.show()
+
+    keyboard.add_hotkey("ctrl+shift+q", lambda: threading.Thread(target=hotkey_handler, daemon=True).start())
 
     def open_manager(icon, item):
         def _open():
