@@ -119,6 +119,9 @@ def is_context_menu_installed():
 # POPUP DE SÉLECTION DES TEMPLATES
 # =============================================================================
 
+_active_popup = None  # Singleton : une seule instance à la fois
+
+
 class TemplatePopup:
     """Fenêtre popup sans bordure qui s'affiche à la position du curseur."""
 
@@ -132,12 +135,33 @@ class TemplatePopup:
     def __init__(self):
         self.templates = load_templates()
         self.root = None
+        self.blocker = None
 
     def show(self):
+        global _active_popup
+
+        # Fermer le popup existant si déjà ouvert
+        if _active_popup is not None:
+            _active_popup._close()
+            return
+
+        _active_popup = self
+
         self.root = tk.Tk()
-        self.root.overrideredirect(True)  # Pas de bordure/titre
+        self.root.overrideredirect(True)
         self.root.configure(bg=self.BG)
         self.root.attributes("-topmost", True)
+
+        # Fenêtre transparente plein écran pour détecter les clics en dehors
+        self.blocker = tk.Toplevel(self.root)
+        self.blocker.overrideredirect(True)
+        self.blocker.attributes("-alpha", 0.01)
+        self.blocker.attributes("-topmost", True)
+        screen_w = self.root.winfo_screenwidth()
+        screen_h = self.root.winfo_screenheight()
+        self.blocker.geometry(f"{screen_w}x{screen_h}+0+0")
+        self.blocker.bind("<Button-1>", lambda e: self._close())
+        self.blocker.bind("<Button-3>", lambda e: self._close())
 
         # Position : à la position du curseur
         x = self.root.winfo_pointerx()
@@ -149,8 +173,6 @@ class TemplatePopup:
         self.root.update_idletasks()
         w = self.root.winfo_reqwidth()
         h = self.root.winfo_reqheight()
-        screen_w = self.root.winfo_screenwidth()
-        screen_h = self.root.winfo_screenheight()
 
         if x + w > screen_w:
             x = screen_w - w - 10
@@ -158,11 +180,8 @@ class TemplatePopup:
             y = screen_h - h - 10
 
         self.root.geometry(f"+{x}+{y}")
-
-        # Fermer si perte de focus
-        self.root.bind("<FocusOut>", lambda e: self._close())
+        self.root.lift()  # S'assurer que le popup est au-dessus du blocker
         self.root.bind("<Escape>", lambda e: self._close())
-
         self.root.focus_force()
         self.root.mainloop()
 
@@ -245,8 +264,7 @@ class TemplatePopup:
 
     def _select_template(self, content):
         """Ferme le popup et colle le template."""
-        self.root.destroy()
-        self.root = None
+        self._close()
 
         def paste():
             time.sleep(0.15)  # Laisser le temps au focus de revenir
@@ -270,8 +288,19 @@ class TemplatePopup:
         threading.Thread(target=paste, daemon=True).start()
 
     def _close(self):
+        global _active_popup
+        _active_popup = None
+        if self.blocker:
+            try:
+                self.blocker.destroy()
+            except Exception:
+                pass
+            self.blocker = None
         if self.root:
-            self.root.destroy()
+            try:
+                self.root.destroy()
+            except Exception:
+                pass
             self.root = None
 
 
