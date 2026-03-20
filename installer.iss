@@ -31,7 +31,7 @@ UninstallDisplayIcon={app}\{#AppExeName}
 Name: "french"; MessagesFile: "compiler:Languages\French.isl"
 
 [Tasks]
-Name: "desktopicon"; Description: "Créer un raccourci sur le Bureau"; GroupDescription: "Raccourcis :"; Flags: checked
+Name: "desktopicon"; Description: "Créer un raccourci sur le Bureau"; GroupDescription: "Raccourcis :"
 Name: "startupicon"; Description: "Lancer automatiquement au démarrage de Windows"; GroupDescription: "Options :"; Flags: unchecked
 
 [Files]
