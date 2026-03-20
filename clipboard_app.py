@@ -13,7 +13,7 @@ import os
 import json
 import time
 import tkinter as tk
-from tkinter import ttk, messagebox, simpledialog
+from tkinter import ttk, messagebox
 import threading
 
 # --- Chemins ---
@@ -36,12 +36,12 @@ DEFAULT_TEMPLATES = [
 def load_templates():
     if not os.path.exists(TEMPLATES_FILE):
         save_templates(DEFAULT_TEMPLATES)
-        return DEFAULT_TEMPLATES
+        return list(DEFAULT_TEMPLATES)
     try:
         with open(TEMPLATES_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
     except (json.JSONDecodeError, IOError):
-        return DEFAULT_TEMPLATES
+        return list(DEFAULT_TEMPLATES)
 
 
 def save_templates(templates):
@@ -59,7 +59,6 @@ MENU_LABEL = "Coller un template..."
 
 
 def get_python_cmd():
-    """Retourne le chemin vers pythonw.exe (sans console)."""
     python_exe = sys.executable
     pythonw = python_exe.replace("python.exe", "pythonw.exe")
     if os.path.exists(pythonw):
@@ -68,23 +67,17 @@ def get_python_cmd():
 
 
 def install_context_menu():
-    """Ajoute l'entrée dans le menu contextuel Windows (clic droit bureau)."""
     try:
         import winreg
         script_path = os.path.abspath(__file__)
         python_cmd = get_python_cmd()
         command = f'"{python_cmd}" "{script_path}" --popup'
-
-        # Créer la clé principale avec le label du menu
         key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, REGISTRY_KEY)
         winreg.SetValueEx(key, "", 0, winreg.REG_SZ, MENU_LABEL)
         winreg.CloseKey(key)
-
-        # Créer la sous-clé command
         cmd_key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, REGISTRY_COMMAND_KEY)
         winreg.SetValueEx(cmd_key, "", 0, winreg.REG_SZ, command)
         winreg.CloseKey(cmd_key)
-
         return True
     except Exception as e:
         messagebox.showerror("Erreur", f"Impossible d'installer le menu contextuel :\n{e}")
@@ -92,21 +85,19 @@ def install_context_menu():
 
 
 def uninstall_context_menu():
-    """Supprime l'entrée du menu contextuel Windows."""
     try:
         import winreg
         winreg.DeleteKey(winreg.HKEY_CURRENT_USER, REGISTRY_COMMAND_KEY)
         winreg.DeleteKey(winreg.HKEY_CURRENT_USER, REGISTRY_KEY)
         return True
     except FileNotFoundError:
-        return True  # Déjà désinstallé
+        return True
     except Exception as e:
         messagebox.showerror("Erreur", f"Impossible de désinstaller le menu contextuel :\n{e}")
         return False
 
 
 def is_context_menu_installed():
-    """Vérifie si le menu contextuel est installé."""
     try:
         import winreg
         winreg.OpenKey(winreg.HKEY_CURRENT_USER, REGISTRY_KEY)
@@ -121,26 +112,35 @@ def is_context_menu_installed():
 
 _active_popup = None  # Singleton : une seule instance à la fois
 
+POPUP_BG       = "#2b2b2b"
+POPUP_BG_HOVER = "#3c5a8a"
+POPUP_FG       = "#ffffff"
+POPUP_FG_DIM   = "#aaaaaa"
+POPUP_BORDER   = "#444444"
+POPUP_HEAD_BG  = "#1e1e1e"
+POPUP_SEARCH_BG = "#3a3a3a"
+POPUP_BTN_BG   = "#1e3a5f"
+
 
 class TemplatePopup:
-    """Fenêtre popup sans bordure qui s'affiche à la position du curseur."""
+    """Fenêtre popup sans bordure avec recherche et navigation clavier."""
 
-    BG = "#2b2b2b"
-    BG_HOVER = "#3d3d3d"
-    FG = "#ffffff"
-    FG_PREVIEW = "#aaaaaa"
-    BORDER = "#555555"
-    TITLE_BG = "#1e1e1e"
+    MAX_VISIBLE = 8  # Nombre max d'entrées visibles avant scroll
 
     def __init__(self):
-        self.templates = load_templates()
+        self.all_templates = load_templates()
+        self.filtered = list(self.all_templates)
+        self.focused_idx = 0
+        self.item_frames = []
         self.root = None
         self.blocker = None
+        self._list_frame = None
+        self._canvas = None
+        self._inner = None
 
     def show(self):
         global _active_popup
 
-        # Fermer le popup existant si déjà ouvert
         if _active_popup is not None:
             _active_popup._close()
             return
@@ -149,29 +149,28 @@ class TemplatePopup:
 
         self.root = tk.Tk()
         self.root.overrideredirect(True)
-        self.root.configure(bg=self.BG)
+        self.root.configure(bg=POPUP_BORDER)
         self.root.attributes("-topmost", True)
+
+        screen_w = self.root.winfo_screenwidth()
+        screen_h = self.root.winfo_screenheight()
 
         # Fenêtre transparente plein écran pour détecter les clics en dehors
         self.blocker = tk.Toplevel(self.root)
         self.blocker.overrideredirect(True)
         self.blocker.attributes("-alpha", 0.01)
         self.blocker.attributes("-topmost", True)
-        screen_w = self.root.winfo_screenwidth()
-        screen_h = self.root.winfo_screenheight()
         self.blocker.geometry(f"{screen_w}x{screen_h}+0+0")
         self.blocker.bind("<Button-1>", lambda e: self._close())
         self.blocker.bind("<Button-3>", lambda e: self._close())
 
-        # Position : à la position du curseur
         x = self.root.winfo_pointerx()
         y = self.root.winfo_pointery()
 
         self._build_ui()
 
-        # Ajuster la position pour ne pas sortir de l'écran
         self.root.update_idletasks()
-        w = self.root.winfo_reqwidth()
+        w = max(self.root.winfo_reqwidth(), 320)
         h = self.root.winfo_reqheight()
 
         if x + w > screen_w:
@@ -179,129 +178,234 @@ class TemplatePopup:
         if y + h > screen_h:
             y = screen_h - h - 10
 
-        self.root.geometry(f"+{x}+{y}")
-        self.root.lift()  # S'assurer que le popup est au-dessus du blocker
+        self.root.geometry(f"{w}x{h}+{x}+{y}")
+        self.root.lift()
+
+        # Bindings clavier
         self.root.bind("<Escape>", lambda e: self._close())
+        self.root.bind("<Up>",     lambda e: self._move_focus(-1))
+        self.root.bind("<Down>",   lambda e: self._move_focus(1))
+        self.root.bind("<Return>", lambda e: self._select_focused())
+
         self.root.focus_force()
         self.root.mainloop()
 
     def _build_ui(self):
-        # Titre
-        title = tk.Label(
-            self.root,
-            text="  Choisir un template",
-            bg=self.TITLE_BG, fg=self.FG_PREVIEW,
+        outer = tk.Frame(self.root, bg=POPUP_BG, padx=1, pady=1)
+        outer.pack(fill="both", expand=True)
+
+        # --- En-tête ---
+        header = tk.Frame(outer, bg=POPUP_HEAD_BG)
+        header.pack(fill="x")
+        tk.Label(
+            header, text="📋  Templates",
+            bg=POPUP_HEAD_BG, fg=POPUP_FG,
+            font=("Segoe UI", 10, "bold"),
+            anchor="w", padx=10, pady=6
+        ).pack(side="left")
+        tk.Label(
+            header, text="Ctrl+Shift+Q",
+            bg=POPUP_HEAD_BG, fg=POPUP_FG_DIM,
+            font=("Segoe UI", 8),
+            anchor="e", padx=10
+        ).pack(side="right")
+
+        # --- Barre de recherche ---
+        search_frame = tk.Frame(outer, bg=POPUP_SEARCH_BG, pady=4)
+        search_frame.pack(fill="x", padx=6, pady=(6, 2))
+        tk.Label(search_frame, text="🔍", bg=POPUP_SEARCH_BG, fg=POPUP_FG_DIM,
+                 font=("Segoe UI", 9)).pack(side="left", padx=(6, 2))
+        self._search_var = tk.StringVar()
+        self._search_var.trace_add("write", self._on_search)
+        search_entry = tk.Entry(
+            search_frame,
+            textvariable=self._search_var,
+            bg=POPUP_SEARCH_BG, fg=POPUP_FG,
+            insertbackground=POPUP_FG,
+            relief="flat",
             font=("Segoe UI", 9),
-            anchor="w", pady=5, padx=5
+            bd=0
         )
-        title.pack(fill="x")
+        search_entry.pack(side="left", fill="x", expand=True, padx=(0, 6))
 
-        # Séparateur
-        tk.Frame(self.root, bg=self.BORDER, height=1).pack(fill="x")
+        tk.Frame(outer, bg=POPUP_BORDER, height=1).pack(fill="x", padx=6)
 
-        if not self.templates:
+        # --- Liste scrollable ---
+        self._list_container = tk.Frame(outer, bg=POPUP_BG)
+        self._list_container.pack(fill="both", expand=True)
+        self._build_list()
+
+        tk.Frame(outer, bg=POPUP_BORDER, height=1).pack(fill="x", padx=6, pady=(4, 0))
+
+        # --- Bouton Gérer ---
+        manage_btn = tk.Label(
+            outer,
+            text="⚙  Gérer les templates",
+            bg=POPUP_BTN_BG, fg=POPUP_FG,
+            font=("Segoe UI", 9),
+            anchor="center", pady=7, cursor="hand2"
+        )
+        manage_btn.pack(fill="x", padx=6, pady=6)
+        manage_btn.bind("<Button-1>", lambda e: self._open_manager())
+        manage_btn.bind("<Enter>", lambda e: manage_btn.configure(bg="#254a7a"))
+        manage_btn.bind("<Leave>", lambda e: manage_btn.configure(bg=POPUP_BTN_BG))
+
+    def _build_list(self):
+        # Vider
+        for w in self._list_container.winfo_children():
+            w.destroy()
+        self.item_frames = []
+
+        if not self.filtered:
             tk.Label(
-                self.root,
-                text="Aucun template disponible",
-                bg=self.BG, fg=self.FG_PREVIEW,
-                font=("Segoe UI", 9),
-                padx=15, pady=8
+                self._list_container,
+                text="Aucun résultat",
+                bg=POPUP_BG, fg=POPUP_FG_DIM,
+                font=("Segoe UI", 9), pady=12
             ).pack()
             return
 
-        # Boutons pour chaque template
-        for template in self.templates:
-            self._add_template_button(template)
+        # Canvas scrollable
+        item_h = 48  # hauteur estimée par item
+        max_h = self.MAX_VISIBLE * item_h
+        total_h = len(self.filtered) * item_h
+        canvas_h = min(total_h, max_h)
 
-    def _add_template_button(self, template):
+        self._canvas = tk.Canvas(
+            self._list_container,
+            bg=POPUP_BG, highlightthickness=0,
+            height=canvas_h
+        )
+        scrollbar = tk.Scrollbar(self._list_container, orient="vertical", command=self._canvas.yview)
+        self._canvas.configure(yscrollcommand=scrollbar.set)
+
+        if total_h > max_h:
+            scrollbar.pack(side="right", fill="y")
+        self._canvas.pack(side="left", fill="both", expand=True)
+
+        self._inner = tk.Frame(self._canvas, bg=POPUP_BG)
+        canvas_window = self._canvas.create_window((0, 0), window=self._inner, anchor="nw")
+
+        self._inner.bind("<Configure>", lambda e: self._canvas.configure(
+            scrollregion=self._canvas.bbox("all")
+        ))
+        self._canvas.bind("<Configure>", lambda e: self._canvas.itemconfig(
+            canvas_window, width=e.width
+        ))
+        self._canvas.bind("<MouseWheel>", lambda e: self._canvas.yview_scroll(-1 * (e.delta // 120), "units"))
+
+        for i, template in enumerate(self.filtered):
+            self._add_item(i, template)
+
+        if self.focused_idx >= len(self.filtered):
+            self.focused_idx = 0
+        self._highlight(self.focused_idx)
+
+    def _add_item(self, idx, template):
         name = template.get("name", "Sans titre")
         content = template.get("content", "")
-        preview = content[:60].replace("\n", " ")
-        if len(content) > 60:
+        preview = content[:70].replace("\n", " ")
+        if len(content) > 70:
             preview += "..."
 
-        frame = tk.Frame(self.root, bg=self.BG, cursor="hand2")
-        frame.pack(fill="x", padx=2, pady=1)
+        frame = tk.Frame(self._inner, bg=POPUP_BG, cursor="hand2")
+        frame.pack(fill="x", pady=1, padx=4)
 
-        name_lbl = tk.Label(
+        tk.Label(
             frame, text=name,
-            bg=self.BG, fg=self.FG,
+            bg=POPUP_BG, fg=POPUP_FG,
             font=("Segoe UI", 10, "bold"),
-            anchor="w", padx=12, pady=3
-        )
-        name_lbl.pack(fill="x")
+            anchor="w", padx=10, pady=3
+        ).pack(fill="x")
 
         if preview:
-            preview_lbl = tk.Label(
+            tk.Label(
                 frame, text=preview,
-                bg=self.BG, fg=self.FG_PREVIEW,
+                bg=POPUP_BG, fg=POPUP_FG_DIM,
                 font=("Segoe UI", 8),
-                anchor="w", padx=12, pady=0
-            )
-            preview_lbl.pack(fill="x")
+                anchor="w", padx=10, pady=0
+            ).pack(fill="x")
 
-        # Hover effect
-        def on_enter(e, f=frame):
-            f.configure(bg=self.BG_HOVER)
-            for child in f.winfo_children():
-                child.configure(bg=self.BG_HOVER)
+        tk.Frame(self._inner, bg=POPUP_BORDER, height=1).pack(fill="x", padx=10)
 
-        def on_leave(e, f=frame):
-            f.configure(bg=self.BG)
-            for child in f.winfo_children():
-                child.configure(bg=self.BG)
+        self.item_frames.append(frame)
+
+        def on_enter(e, i=idx):
+            self._highlight(i)
 
         def on_click(e, t=template):
             self._select_template(t["content"])
 
-        for widget in [frame, name_lbl] + ([preview_lbl] if preview else []):
-            widget.bind("<Enter>", on_enter)
-            widget.bind("<Leave>", on_leave)
-            widget.bind("<Button-1>", on_click)
+        frame.bind("<Enter>", on_enter)
+        frame.bind("<Button-1>", on_click)
+        for child in frame.winfo_children():
+            child.bind("<Enter>", on_enter)
+            child.bind("<Button-1>", on_click)
 
-        # Séparateur léger
-        tk.Frame(self.root, bg=self.BORDER, height=1).pack(fill="x", padx=8)
+    def _highlight(self, idx):
+        self.focused_idx = idx
+        for i, frame in enumerate(self.item_frames):
+            color = POPUP_BG_HOVER if i == idx else POPUP_BG
+            frame.configure(bg=color)
+            for child in frame.winfo_children():
+                child.configure(bg=color)
+
+    def _move_focus(self, direction):
+        if not self.item_frames:
+            return
+        new_idx = (self.focused_idx + direction) % len(self.filtered)
+        self._highlight(new_idx)
+        # Scroll pour garder l'item visible
+        if self._canvas:
+            self._canvas.yview_moveto(new_idx / max(len(self.filtered), 1))
+
+    def _select_focused(self):
+        if self.filtered and 0 <= self.focused_idx < len(self.filtered):
+            self._select_template(self.filtered[self.focused_idx]["content"])
+
+    def _on_search(self, *_):
+        query = self._search_var.get().lower()
+        self.filtered = [t for t in self.all_templates if query in t["name"].lower() or query in t.get("content", "").lower()]
+        self.focused_idx = 0
+        self._build_list()
+
+    def _open_manager(self):
+        self._close()
+        def _open():
+            manager = TemplateManager()
+            manager.run()
+        threading.Thread(target=_open, daemon=True).start()
 
     def _select_template(self, content):
-        """Ferme le popup et colle le template."""
         self._close()
 
         def paste():
-            time.sleep(0.15)  # Laisser le temps au focus de revenir
+            time.sleep(0.15)
             try:
                 import pyperclip
                 pyperclip.copy(content)
             except ImportError:
-                # Fallback si pyperclip n'est pas installé
                 import subprocess
-                subprocess.run(
-                    ["clip"],
-                    input=content.encode("utf-16"),
-                    check=True
-                )
+                subprocess.run(["clip"], input=content.encode("utf-16"), check=True)
             try:
                 import pyautogui
                 pyautogui.hotkey("ctrl", "v")
             except ImportError:
-                pass  # Si pyautogui absent, au moins le clipboard est rempli
+                pass
 
         threading.Thread(target=paste, daemon=True).start()
 
     def _close(self):
         global _active_popup
         _active_popup = None
-        if self.blocker:
-            try:
-                self.blocker.destroy()
-            except Exception:
-                pass
-            self.blocker = None
-        if self.root:
-            try:
-                self.root.destroy()
-            except Exception:
-                pass
-            self.root = None
+        for attr in ("blocker", "root"):
+            w = getattr(self, attr, None)
+            if w:
+                try:
+                    w.destroy()
+                except Exception:
+                    pass
+                setattr(self, attr, None)
 
 
 # =============================================================================
@@ -319,75 +423,112 @@ class TemplateManager(tk.Toplevel):
             self._root.withdraw()
             super().__init__(self._root)
 
+        # Thème ttk moderne
+        style = ttk.Style(self)
+        style.theme_use("clam")
+        style.configure("TButton", font=("Segoe UI", 9), padding=5)
+        style.configure("Accent.TButton", font=("Segoe UI", 9, "bold"), padding=5)
+        style.configure("TLabel", font=("Segoe UI", 9))
+        style.configure("TLabelframe.Label", font=("Segoe UI", 9, "bold"))
+
         self.title("Gestionnaire de Templates")
-        self.geometry("600x450")
+        self.geometry("720x500")
+        self.minsize(580, 400)
         self.resizable(True, True)
         self.templates = load_templates()
         self._build_ui()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
     def _build_ui(self):
-        # --- Frame principale ---
-        main = tk.Frame(self)
-        main.pack(fill="both", expand=True, padx=10, pady=10)
+        # --- Zone principale ---
+        main = tk.Frame(self, bg="#f0f0f0")
+        main.pack(fill="both", expand=True, padx=12, pady=12)
 
-        # --- Liste des templates ---
-        list_frame = tk.LabelFrame(main, text="Templates", padx=5, pady=5)
-        list_frame.pack(fill="both", expand=True, side="left", padx=(0, 5))
+        # --- Colonne gauche : liste ---
+        left = ttk.LabelFrame(main, text=" Liste des templates ")
+        left.pack(fill="both", expand=True, side="left", padx=(0, 6))
 
-        scrollbar = tk.Scrollbar(list_frame)
-        scrollbar.pack(side="right", fill="y")
-
+        sb = ttk.Scrollbar(left)
+        sb.pack(side="right", fill="y")
         self.listbox = tk.Listbox(
-            list_frame,
-            yscrollcommand=scrollbar.set,
+            left,
+            yscrollcommand=sb.set,
             selectmode="single",
             font=("Segoe UI", 10),
-            width=25
+            width=22,
+            relief="flat",
+            bg="white",
+            selectbackground="#4a90d9",
+            selectforeground="white",
+            activestyle="none",
         )
-        self.listbox.pack(fill="both", expand=True)
-        scrollbar.config(command=self.listbox.yview)
+        self.listbox.pack(fill="both", expand=True, padx=4, pady=4)
+        sb.config(command=self.listbox.yview)
         self.listbox.bind("<<ListboxSelect>>", self._on_select)
+        self.listbox.bind("<Double-Button-1>", lambda e: self._edit_template())
 
-        # Boutons CRUD
-        btn_frame = tk.Frame(main)
-        btn_frame.pack(fill="y", side="left")
+        # Boutons sous la liste
+        btn_row = tk.Frame(left, bg="#f0f0f0")
+        btn_row.pack(fill="x", padx=4, pady=(0, 4))
+        ttk.Button(btn_row, text="➕ Nouveau",   command=self._new_template).pack(side="left", padx=2)
+        ttk.Button(btn_row, text="✏️ Modifier",  command=self._edit_template).pack(side="left", padx=2)
+        ttk.Button(btn_row, text="🗑️ Supprimer", command=self._delete_template).pack(side="left", padx=2)
+        ttk.Button(btn_row, text="⬆",            command=self._move_up,   width=3).pack(side="right", padx=1)
+        ttk.Button(btn_row, text="⬇",            command=self._move_down, width=3).pack(side="right", padx=1)
 
-        tk.Button(btn_frame, text="➕ Nouveau", width=14, command=self._new_template).pack(pady=3)
-        tk.Button(btn_frame, text="✏️ Modifier", width=14, command=self._edit_template).pack(pady=3)
-        tk.Button(btn_frame, text="🗑️ Supprimer", width=14, command=self._delete_template).pack(pady=3)
-        tk.Button(btn_frame, text="⬆️ Monter", width=14, command=self._move_up).pack(pady=3)
-        tk.Button(btn_frame, text="⬇️ Descendre", width=14, command=self._move_down).pack(pady=3)
+        # --- Colonne droite : aperçu ---
+        right = ttk.LabelFrame(main, text=" Aperçu du contenu ")
+        right.pack(fill="both", expand=True, side="left")
 
-        # --- Séparateur ---
-        tk.Frame(self, height=1, bg="#cccccc").pack(fill="x", padx=10)
+        self.preview_text = tk.Text(
+            right,
+            font=("Segoe UI", 10),
+            wrap="word",
+            relief="flat",
+            bg="white",
+            state="disabled",
+            padx=8, pady=8
+        )
+        preview_sb = ttk.Scrollbar(right, command=self.preview_text.yview)
+        self.preview_text.configure(yscrollcommand=preview_sb.set)
+        preview_sb.pack(side="right", fill="y")
+        self.preview_text.pack(fill="both", expand=True, padx=4, pady=4)
 
-        # --- Menu contextuel Windows ---
-        ctx_frame = tk.LabelFrame(self, text="Menu contextuel Windows (clic droit bureau)", padx=10, pady=8)
-        ctx_frame.pack(fill="x", padx=10, pady=(5, 10))
+        # --- Barre du bas : menu clic droit ---
+        bottom = ttk.LabelFrame(self, text=" Menu contextuel Windows (clic droit bureau) ")
+        bottom.pack(fill="x", padx=12, pady=(0, 12))
+
+        inner = tk.Frame(bottom)
+        inner.pack(fill="x", padx=8, pady=6)
 
         self.ctx_status_var = tk.StringVar()
-        self.ctx_status_lbl = tk.Label(ctx_frame, textvariable=self.ctx_status_var, font=("Segoe UI", 9))
-        self.ctx_status_lbl.pack(side="left", padx=(0, 10))
-
-        self.ctx_btn = tk.Button(ctx_frame, text="", width=20, command=self._toggle_context_menu)
+        ttk.Label(inner, textvariable=self.ctx_status_var).pack(side="left", padx=(0, 12))
+        self.ctx_btn = ttk.Button(inner, text="", command=self._toggle_context_menu, width=28)
         self.ctx_btn.pack(side="left")
 
         self._refresh_ctx_status()
-
-        # Remplir la liste
         self._refresh_list()
 
     def _refresh_list(self, select_index=None):
         self.listbox.delete(0, "end")
         for t in self.templates:
-            self.listbox.insert("end", t["name"])
+            self.listbox.insert("end", f"  {t['name']}")
         if select_index is not None:
             self.listbox.selection_set(select_index)
             self.listbox.see(select_index)
+            self._update_preview(select_index)
 
     def _on_select(self, event):
-        pass  # Pas d'aperçu en temps réel pour simplifier
+        idx = self._get_selected_index()
+        if idx is not None:
+            self._update_preview(idx)
+
+    def _update_preview(self, idx):
+        content = self.templates[idx].get("content", "") if idx < len(self.templates) else ""
+        self.preview_text.configure(state="normal")
+        self.preview_text.delete("1.0", "end")
+        self.preview_text.insert("1.0", content)
+        self.preview_text.configure(state="disabled")
 
     def _get_selected_index(self):
         sel = self.listbox.curselection()
@@ -403,7 +544,7 @@ class TemplateManager(tk.Toplevel):
     def _edit_template(self):
         idx = self._get_selected_index()
         if idx is None:
-            messagebox.showinfo("Info", "Sélectionnez un template à modifier.")
+            messagebox.showinfo("Info", "Sélectionnez un template à modifier.", parent=self)
             return
         dialog = TemplateDialog(self, title="Modifier le template", template=self.templates[idx])
         if dialog.result:
@@ -414,13 +555,18 @@ class TemplateManager(tk.Toplevel):
     def _delete_template(self):
         idx = self._get_selected_index()
         if idx is None:
-            messagebox.showinfo("Info", "Sélectionnez un template à supprimer.")
+            messagebox.showinfo("Info", "Sélectionnez un template à supprimer.", parent=self)
             return
         name = self.templates[idx]["name"]
-        if messagebox.askyesno("Confirmer", f"Supprimer le template \"{name}\" ?"):
+        if messagebox.askyesno("Confirmer", f'Supprimer le template "{name}" ?', parent=self):
             del self.templates[idx]
             save_templates(self.templates)
-            self._refresh_list(max(0, idx - 1) if self.templates else None)
+            new_idx = min(idx, len(self.templates) - 1) if self.templates else None
+            self._refresh_list(new_idx)
+            if new_idx is None:
+                self.preview_text.configure(state="normal")
+                self.preview_text.delete("1.0", "end")
+                self.preview_text.configure(state="disabled")
 
     def _move_up(self):
         idx = self._get_selected_index()
@@ -440,25 +586,22 @@ class TemplateManager(tk.Toplevel):
 
     def _refresh_ctx_status(self):
         if is_context_menu_installed():
-            self.ctx_status_var.set("✅ Installé")
-            self.ctx_status_lbl.configure(fg="green")
+            self.ctx_status_var.set("✅  Installé")
             self.ctx_btn.configure(text="Désinstaller le menu clic droit")
         else:
-            self.ctx_status_var.set("❌ Non installé")
-            self.ctx_status_lbl.configure(fg="red")
+            self.ctx_status_var.set("❌  Non installé")
             self.ctx_btn.configure(text="Installer le menu clic droit")
 
     def _toggle_context_menu(self):
         if is_context_menu_installed():
             if uninstall_context_menu():
-                messagebox.showinfo("Succès", "Menu contextuel désinstallé.")
+                messagebox.showinfo("Succès", "Menu contextuel désinstallé.", parent=self)
         else:
             if install_context_menu():
                 messagebox.showinfo(
                     "Succès",
-                    "Menu contextuel installé !\n\n"
-                    "Faites un clic droit sur le bureau pour voir l'entrée\n"
-                    '"Coller un template..."'
+                    'Menu contextuel installé !\n\nFaites un clic droit sur le bureau\npour voir l\'entrée "Coller un template..."',
+                    parent=self
                 )
         self._refresh_ctx_status()
 
@@ -470,7 +613,6 @@ class TemplateManager(tk.Toplevel):
             pass
 
     def run(self):
-        """Lance la boucle principale (mode standalone)."""
         try:
             self._root.mainloop()
         except Exception:
@@ -491,7 +633,8 @@ class TemplateDialog(tk.Toplevel):
         self.result = None
         self._template = template or {"name": "", "content": ""}
         self._build_ui()
-        self.geometry("500x350")
+        self.geometry("520x380")
+        self.minsize(400, 300)
         self.transient(parent)
         self.grab_set()
         self.wait_window()
@@ -500,22 +643,28 @@ class TemplateDialog(tk.Toplevel):
         frame = tk.Frame(self, padx=15, pady=10)
         frame.pack(fill="both", expand=True)
 
-        # Nom
-        tk.Label(frame, text="Nom du template :", anchor="w").pack(fill="x")
+        ttk.Label(frame, text="Nom du template :").pack(anchor="w")
         self.name_var = tk.StringVar(value=self._template["name"])
-        tk.Entry(frame, textvariable=self.name_var, font=("Segoe UI", 10)).pack(fill="x", pady=(0, 10))
+        ttk.Entry(frame, textvariable=self.name_var, font=("Segoe UI", 10)).pack(fill="x", pady=(2, 10))
 
-        # Contenu
-        tk.Label(frame, text="Contenu :", anchor="w").pack(fill="x")
-        self.content_text = tk.Text(frame, font=("Segoe UI", 10), wrap="word", height=10)
+        ttk.Label(frame, text="Contenu :").pack(anchor="w")
+        text_frame = tk.Frame(frame)
+        text_frame.pack(fill="both", expand=True, pady=(2, 0))
+        sb = ttk.Scrollbar(text_frame)
+        sb.pack(side="right", fill="y")
+        self.content_text = tk.Text(
+            text_frame,
+            font=("Segoe UI", 10), wrap="word",
+            yscrollcommand=sb.set, relief="solid", bd=1
+        )
+        sb.config(command=self.content_text.yview)
         self.content_text.pack(fill="both", expand=True)
         self.content_text.insert("1.0", self._template["content"])
 
-        # Boutons
         btn_frame = tk.Frame(frame)
         btn_frame.pack(fill="x", pady=(10, 0))
-        tk.Button(btn_frame, text="Annuler", command=self.destroy, width=10).pack(side="right", padx=(5, 0))
-        tk.Button(btn_frame, text="Enregistrer", command=self._save, width=12).pack(side="right")
+        ttk.Button(btn_frame, text="Annuler",      command=self.destroy,  width=10).pack(side="right", padx=(4, 0))
+        ttk.Button(btn_frame, text="💾 Enregistrer", command=self._save,  width=14).pack(side="right")
 
     def _save(self):
         name = self.name_var.get().strip()
@@ -532,7 +681,6 @@ class TemplateDialog(tk.Toplevel):
 # =============================================================================
 
 def create_tray_icon():
-    """Crée une image d'icône 64x64 avec Pillow."""
     from PIL import Image, ImageDraw, ImageFont
     img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
@@ -546,7 +694,6 @@ def create_tray_icon():
 
 
 def run_tray():
-    """Lance l'application en mode system tray."""
     import pystray
     import keyboard
 
@@ -565,29 +712,23 @@ def run_tray():
         threading.Thread(target=_open, daemon=True).start()
 
     def open_popup(icon, item):
-        def _open():
-            popup = TemplatePopup()
-            popup.show()
-        threading.Thread(target=_open, daemon=True).start()
+        threading.Thread(target=hotkey_handler, daemon=True).start()
 
     def toggle_ctx(icon, item):
         if is_context_menu_installed():
             uninstall_context_menu()
         else:
             install_context_menu()
-        # Forcer le rafraîchissement du menu
         icon.update_menu()
 
     def ctx_menu_label(item):
-        if is_context_menu_installed():
-            return "Désinstaller menu clic droit"
-        return "Installer menu clic droit"
+        return "Désinstaller menu clic droit" if is_context_menu_installed() else "Installer menu clic droit"
 
     def quit_app(icon, item):
         icon.stop()
 
     menu = pystray.Menu(
-        pystray.MenuItem("Coller un template...", open_popup),
+        pystray.MenuItem("Coller un template...  (Ctrl+Shift+Q)", open_popup),
         pystray.MenuItem("Gérer les templates", open_manager),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem(ctx_menu_label, toggle_ctx),
@@ -605,15 +746,12 @@ def run_tray():
 
 def main():
     if "--popup" in sys.argv:
-        # Mode popup : affiché par le clic droit Windows
         popup = TemplatePopup()
         popup.show()
     elif "--manage" in sys.argv:
-        # Mode gestion standalone
         manager = TemplateManager()
         manager.run()
     else:
-        # Mode normal : icône system tray
         run_tray()
 
 
